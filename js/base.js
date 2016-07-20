@@ -13,26 +13,79 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Living Globe v1.0.0
- * Authors: Ed Duarte (ed@edduarte.com) and Pedro Bordonhos (bordonhos@ua.pt)
+ * Living Globe v3.0.2
+ * Authors: Eduardo Duarte (ed@edduarte.com) and Pedro Bordonhos (bordonhos@ua.pt)
  */
 
+$('#info-modal').modal('show').modal('hide');
+$('#config-modal').modal('show').modal('hide');
+
+var boxPlotContainer = $('#boxPlotContainer');
+var chart1 = nv.models.boxPlotChart()
+    .x(function(d) { return d.label })
+    .y(function(d) { return d.values.Q3 })
+    .width(120)
+    .height(150)
+    .margin({"left":10,"right":0,"top":5,"bottom":5})
+    .noData("No data")
+    .duration(0)
+    .showXAxis(false)
+    .showYAxis(false)
+    .maxBoxWidth(75);
+d3.select('#chart1 svg')
+    .call(chart1);
+nv.utils.windowResize(chart1.update);
+
+var chart2 = nv.models.boxPlotChart()
+    .x(function(d) { return d.label })
+    .y(function(d) { return d.values.Q3 })
+    .width(120)
+    .height(150)
+    .margin({"left":10,"right":0,"top":5,"bottom":5})
+    .noData("No data")
+    .duration(0)
+    .showXAxis(false)
+    .showYAxis(false)
+    .maxBoxWidth(75);
+d3.select('#chart2 svg')
+    .call(chart2);
+nv.utils.windowResize(chart2.update);
+
+var chart3 = nv.models.boxPlotChart()
+    .x(function(d) { return d.label })
+    .y(function(d) { return d.values.Q3 })
+    .width(120)
+    .height(150)
+    .margin({"left":10,"right":0,"top":5,"bottom":5})
+    .noData("No data")
+    .duration(0)
+    .showXAxis(false)
+    .showYAxis(false)
+    .maxBoxWidth(75);
+d3.select('#chart3 svg')
+    .call(chart3);
+nv.utils.windowResize(chart3.update);
+
+nv.addGraph(function() {
+    return chart1;
+});
+nv.addGraph(function() {
+    return chart2;
+});
+nv.addGraph(function() {
+    return chart3;
+});
 
 // constant values
-var defaultSelectedYear = 2012;
-var selectedIndicator1Id = "SP.POP.TOTL";
-var selectedIndicator2Id = "SP.POP.GROW";
-var selectedIndicator3Id = "SP.DYN.CBDRT.IN";
-var minimumDragDistance = 0.04;
-var barWidth = 0.4;
-var barColorScaleStart = '#007aff';
-var barColorScaleEnd = '#ffd500';
-var barColorScale = chroma.scale([barColorScaleStart, barColorScaleEnd]);
-var barNoDataColor = '#ffffff';
+var tooltipOffset = 1;
+var selectedIndicator1Id;
+var selectedIndicator2Id;
+var selectedIndicator3Id;
+//var minimumDragDistance = 0.04;
+var barWidth = 0.5;
+var barNoDataColor = '#747474';
 var barNoDataHeight = 40;
-var countryColorScaleStart = '#FF2A2A';
-var countryColorScaleEnd = '#23D723';
-var countryColorScale = chroma.scale([countryColorScaleStart, countryColorScaleEnd]);
+var maxBarHeight = 40;
 
 
 // camera zoom & tween target variables used on "animate()" method to move
@@ -50,7 +103,7 @@ var cameraTargetLZ = 0;
 // mouse interaction variables
 var lastMouseX = 0;
 var lastMouseY = 0;
-var isSelectingCountry = false;
+//var isSelectingCountry = false;
 var projector = new THREE.Projector();
 var mouse2D = new THREE.Vector3(0, 0, 0.5);
 
@@ -81,11 +134,21 @@ var autoCompleteLookup;
 // selection
 var inputData = {};
 var shownCountries = [];
-var shownBars = [];
-var selectedYear = defaultSelectedYear;
+var shownBarsData = [];
+var selectedYear = 2013;
 var selectedYearJson = {};
 var selectedCountryCode = -1;
 var selectedCountryLineIndex = -1;
+
+var showBoxPlots = false;
+var showBoxPlotsCheckbox = document.getElementById("showBoxPlotsCheckbox");
+showBoxPlotsCheckbox.checked = showBoxPlots;
+
+var anchorCountryDetailsToMouse = false;
+var anchorCountryDetailsToMouseCheckbox =
+    document.getElementById("anchorCountryDetailsToMouseCheckbox");
+anchorCountryDetailsToMouseCheckbox.checked = anchorCountryDetailsToMouse;
+
 var keepBoundsOnYearChange = false;
 var keepBoundsCheckbox = document.getElementById("keepBoundsCheckbox");
 keepBoundsCheckbox.checked = keepBoundsOnYearChange;
@@ -111,7 +174,66 @@ var selectedMinIndicator3 = 0;
 var realMaxIndicator3 = 0;
 var selectedMaxIndicator3 = 0;
 
-$('#info-modal').modal('show').modal('hide');
+
+// loading
+var loading = $('#loading').addClass('loading-ring-css');
+var loadingContainer = $('#loadingContainer').show();
+
+
+// custom color pickers
+var barColorScaleStart = '#007aff';
+var barColorScaleEnd = '#ffd500';
+var barColorScale = chroma.scale([barColorScaleStart, barColorScaleEnd]);
+var countryColorScaleStart = '#FF2A2A';
+var countryColorScaleEnd = '#23D723';
+var countryColorScale = chroma.scale([countryColorScaleStart, countryColorScaleEnd]);
+var sliderIndicator2MinColorPicker = $('#sliderIndicator2-min-color-picker');
+var sliderIndicator2MaxColorPicker = $('#sliderIndicator2-max-color-picker');
+var sliderIndicator3MinColorPicker = $('#sliderIndicator3-min-color-picker');
+var sliderIndicator3MaxColorPicker = $('#sliderIndicator3-max-color-picker');
+sliderIndicator2MinColorPicker.colorpicker({
+    format: 'hsl',
+    color: barColorScaleStart
+}).on('changeColor.colorpicker', function(event){
+    barColorScaleStart = event.color.toHex();
+    barColorScale = chroma.scale([barColorScaleStart, barColorScaleEnd]);
+    $('#sliderIndicator2 .noUi-connect')
+        .css('background', '-webkit-linear-gradient(left, #007aff , #ffd500);') /* For Safari 5.1 to 6.0 */
+        .css('background', '-o-linear-gradient(right, #007aff, #ffd500);') /* For Opera 11.1 to 12.0 */
+        .css('background', '-moz-linear-gradient(right, #007aff, #ffd500);') /* For Firefox 3.6 to 15 */
+        .css('background', 'linear-gradient(to right, #007aff , #ffd500);'); /* Standard syntax (must be last) */
+    $(this).css("background-color", barColorScaleStart);
+    //updateIndicator2Slider();
+    rebuildComponents1And2();
+}).css("background-color", barColorScaleStart);
+sliderIndicator2MaxColorPicker.colorpicker({
+    format: 'hsl',
+    color: barColorScaleEnd
+}).on('changeColor.colorpicker', function(event){
+    barColorScaleEnd = event.color.toHex();
+    barColorScale = chroma.scale([barColorScaleStart, barColorScaleEnd]);
+    $(this).css("background-color", barColorScaleEnd);
+    rebuildComponents1And2();
+}).css("background-color", barColorScaleEnd);
+sliderIndicator3MinColorPicker.colorpicker({
+    format: 'hsl',
+    color: countryColorScaleStart
+}).on('changeColor.colorpicker', function(event){
+    countryColorScaleStart = event.color.toHex();
+    countryColorScale = chroma.scale([countryColorScaleStart, countryColorScaleEnd]);
+    $(this).css("background-color", countryColorScaleStart);
+    rebuildComponents3();
+}).css("background-color", countryColorScaleStart);
+sliderIndicator3MaxColorPicker.colorpicker({
+    format: 'hsl',
+    color: countryColorScaleEnd
+}).on('changeColor.colorpicker', function(event){
+    countryColorScaleEnd = event.color.toHex();
+    countryColorScale = chroma.scale([countryColorScaleStart, countryColorScaleEnd]);
+    $(this).css("background-color", countryColorScaleEnd);
+    rebuildComponents3();
+}).css("background-color", countryColorScaleEnd);
+
 
 // sliders setup, used to filter data
 var timelineContainer = $('#timelineContainer');
@@ -164,6 +286,7 @@ indicator3Slider.setAttribute('disabled', true);
 
 
 // dropdown setup, used to map indicators to components
+var indicator1Name = $('#indicator1Name');
 var dropdownIndicator1 = $('#dropdownIndicator1');
 var dropdownIndicator1Container = $('#dropdownIndicator1Container');
 var dropdownIndicator1Toggle = dropdownIndicator1Container.find('.dropdown-toggle');
@@ -184,10 +307,12 @@ dropdownIndicator1Container.on('click', '.dropdown-menu li a', function() {
 
     selectedIndicator1Id = id;
     dropdownIndicator1Text.html(name);
+    indicator1Name.html(name);
     dropdownIndicator1Toggle.blur();
     updateIndicator1Slider();
     rebuildComponents1And2();
 });
+var indicator2Name = $('#indicator2Name');
 var dropdownIndicator2 = $('#dropdownIndicator2');
 var dropdownIndicator2Container = $('#dropdownIndicator2Container');
 var dropdownIndicator2Toggle = dropdownIndicator2Container.find('.dropdown-toggle');
@@ -208,10 +333,12 @@ dropdownIndicator2Container.on('click', '.dropdown-menu li a', function() {
 
     selectedIndicator2Id = id;
     dropdownIndicator2Text.html(name);
+    indicator2Name.html(name);
     dropdownIndicator2Toggle.blur();
     updateIndicator2Slider();
     rebuildComponents1And2();
 });
+var indicator3Name = $('#indicator3Name');
 var dropdownIndicator3 = $('#dropdownIndicator3');
 var dropdownIndicator3Container = $('#dropdownIndicator3Container');
 var dropdownIndicator3Toggle = dropdownIndicator3Container.find('.dropdown-toggle');
@@ -232,6 +359,7 @@ dropdownIndicator3Container.on('click', '.dropdown-menu li a', function() {
 
     selectedIndicator3Id = id;
     dropdownIndicator3Text.html(name);
+    indicator3Name.html(name);
     dropdownIndicator3Toggle.blur();
     updateIndicator3Slider();
     rebuildComponents3();
@@ -243,14 +371,13 @@ var globeScene = new THREE.Scene();
 
 
 // camera
-var SCREEN_WIDTH = window.innerWidth;
-var SCREEN_HEIGHT = window.innerHeight;
+var worldContainer = document.getElementById('worldContainer');
 var VIEW_ANGLE = 47;
-var ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT;
+var ASPECT = worldContainer.offsetWidth / worldContainer.offsetHeight;
 var NEAR = 0.5;
 var FAR = 20000;
 var camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, FAR);
-camera.position.set(0,250,250);
+camera.position.set(0,300,300);
 cameraPos0 = camera.position.clone();
 cameraUp0 = camera.up.clone();
 cameraZoom = camera.position.z;
@@ -266,37 +393,44 @@ if (Detector.webgl) {
 } else {
     renderer = new THREE.CanvasRenderer();
 }
-renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+renderer.setSize(worldContainer.offsetWidth, worldContainer.offsetHeight);
 renderer.sortObjects = false;
 renderer.generateMipmaps = false;
 renderer.setClearColor(0x000000, 0);
-//renderer.setClearColor( 0xffffff, 0);
-THREEx.WindowResize(renderer, camera);
+THREEx.WindowResize(renderer, camera, worldContainer);
 
 
 // mouse events
 var rendererDom = renderer.domElement;
-rendererDom.addEventListener('mousewheel', onMouseWheel);
-rendererDom.addEventListener('DOMMouseScroll', onMouseWheel);
-rendererDom.addEventListener('mousemove', onMouseMove);
-rendererDom.addEventListener('mousedown', onMouseDown);
-rendererDom.addEventListener('mouseup', onMouseUp);
-var detailsContainer = document.getElementById('detailsContainer');
-detailsContainer.addEventListener('mousewheel', onMouseWheel);
-detailsContainer.addEventListener('DOMMouseScroll', onMouseWheel);
-detailsContainer.addEventListener('mousemove', onMouseMove);
-detailsContainer.addEventListener('mousedown', onMouseDown);
-detailsContainer.addEventListener('mouseup', onMouseUp);
-var worldIntercept = document.getElementById('worldIntercept');
-var worldContainer = document.getElementById('worldContainer');
+rendererDom.addEventListener('mousewheel', onMouseWheel, false);
+rendererDom.addEventListener('DOMMouseScroll', onMouseWheel, false);
+rendererDom.addEventListener('mousemove', onMouseMove, false);
+rendererDom.addEventListener('mousedown', onMouseDown, false);
+rendererDom.addEventListener('mouseup', onMouseUp, false);
+rendererDom.addEventListener('touchstart', onTouchStart, false);
+rendererDom.addEventListener('touchmove', onTouchMove, false);
+//var detailsContainer = document.getElementById('detailsContainer');
+var detailsContainerJQuery = $("#detailsContainer");
+//detailsContainer.addEventListener('mousewheel', onMouseWheel);
+//detailsContainer.addEventListener('DOMMouseScroll', onMouseWheel);
+//detailsContainer.addEventListener('mousemove', onMouseMove);
+//detailsContainer.addEventListener('mousedown', onMouseDown);
+//detailsContainer.addEventListener('mouseup', onMouseUp);
+var parameters = document.getElementById('parameters');
+parameters.addEventListener('mousewheel', onMouseWheel);
+parameters.addEventListener('DOMMouseScroll', onMouseWheel);
+parameters.addEventListener('mousemove', onMouseMove);
+parameters.addEventListener('mousedown', onMouseDown);
+parameters.addEventListener('mouseup', onMouseUp);
 worldContainer.appendChild(rendererDom);
 
 
 // controls (OrbitControls with damping)
-var controls = new THREE.OrbitControls(camera, worldIntercept);
-controls.dynamicDampingFactor = 0.5;
+var controls = new THREE.OrbitTrackballControls(camera, worldContainer);
+controls.dynamicDampingFactor = 0.7;
+controls.rotateSpeed = 0.3;
 controls.userPan = false;
-controls.userRotateSpeed = 0.8;
+controls.userRotateSpeed = 0.3;
 
 // lights
 var light1 = new THREE.PointLight(0xffffff);
@@ -338,19 +472,19 @@ mapTexture.needsUpdate = true;
 
 
 // satellite texture, used for aesthetic purposes only
-var blendImage = THREE.ImageUtils.loadTexture("img/earth-day-compressed.png");
+var blendImage = THREE.ImageUtils.loadTexture("img/outline5-comp2.png");
 
 
 // outline texture, used for aesthetic purposes only
-var outlineTexture = THREE.ImageUtils.loadTexture("img/outline-compressed.png");
+var outlineTexture = THREE.ImageUtils.loadTexture("img/outline10-comp2-dark2.png");
 outlineTexture.needsUpdate = true;
 
 
 // the final material for the world object merges multiple layered textures
 var worldSphereMaterial = new THREE.ShaderMaterial({
     uniforms: {
-        width:        { type: "f", value: window.innerWidth },
-        height:       { type: "f", value: window.innerHeight },
+        width:        { type: "f", value: worldContainer.offsetWidth },
+        height:       { type: "f", value: worldContainer.offsetHeight },
         mapIndex:     { type: "t", value: mapTexture },
         outline:      { type: "t", value: outlineTexture },
         outlineLevel: { type: 'f', value: 1 },
@@ -401,7 +535,7 @@ var renderTargetParameters = {
     format: THREE.RGBFormat,
     stencilBuffer: false
 };
-var renderTarget = new THREE.WebGLRenderTarget(SCREEN_WIDTH, SCREEN_HEIGHT, renderTargetParameters);
+var renderTarget = new THREE.WebGLRenderTarget(worldContainer.offsetWidth, worldContainer.offsetHeight, renderTargetParameters);
 //var atmosphereComposer = new THREE.EffectComposer(renderer, renderTarget );
 //
 //// prepare the secondary render's passes
@@ -420,69 +554,27 @@ imageObj.onload = function() {
 imageObj.src = 'img/index.png';
 
 
-// post-processing flags
-renderer.autoClear = false;
-
-
 // anti-aliasing setup
+renderer.autoClear = false;
 var composer = new THREE.EffectComposer(renderer, renderTarget);
 var renderModel = new THREE.RenderPass(globeScene, camera);
-var effectFXAA = new THREE.ShaderPass(THREE.FXAAShader);
-var width = window.innerWidth || 2;
-var height = window.innerHeight || 2;
-effectFXAA.uniforms['resolution'].value.set(1 / width, 1 / height);
+//var effectFXAA = new THREE.ShaderPass(THREE.FXAAShader);
+//var width = worldContainer.offsetWidth || 2;
+//var height = worldContainer.offsetHeight || 2;
+//effectFXAA.uniforms['resolution'].value.set(1 / width, 1 / height);
 //var effectBlend = new THREE.ShaderPass(THREE.AdditiveBlendShader, "tDiffuse1");
 //effectBlend.uniforms[ 'tDiffuse2' ].value = atmosphereComposer.renderTarget2;
 //effectBlend.renderToScreen = true;
-var effectCopy = new THREE.ShaderPass(THREE.CopyShader);
-effectCopy.renderToScreen = true;
+//var effectCopy = new THREE.ShaderPass(THREE.CopyShader);
+//effectCopy.renderToScreen = true;
 composer.addPass(renderModel);
-composer.addPass(effectFXAA);
-//composer.addPass(effectBlend);
-composer.addPass(effectCopy);
+//composer.addPass(effectFXAA);
+////composer.addPass(effectBlend);
+//composer.addPass(effectCopy);
 
 
 // search field setup
 var searchField = $('#searchField');
-readJsonFile('data/countries.json', function(countries) {
-    ISOCodeToDetailsMap = countries;
-    // data is listed in a second array with the format
-    // [{value: country name, data: ISO-3166 country code}, ...],
-    // which is then used as the input of dev-bridge auto-complete plugin
-    autoCompleteLookup = [];
-    for (var c in countries) {
-        // add country names and capitals to be used on auto complete search field
-        autoCompleteLookup.push({
-            value: countries[c].name,
-            data: c
-        });
-    }
-    searchField.on('focus', function() {
-        var $this = $(this)
-            .one('mouseup.mouseupSelect', function() {
-                $this.select();
-                return false;
-            })
-            .one('mousedown', function() {
-                // compensate for untriggered 'mouseup' caused by focus via tab
-                $this.off('mouseup.mouseupSelect');
-            })
-            .select();
-    }).val("").devbridgeAutocomplete({
-        minChars: 1,
-        width: 430,
-        autoSelectFirst: true,
-        triggerSelectOnValidInput: false,
-        preventBadQueries: false,
-        lookup: autoCompleteLookup,
-        onSelect: function (suggestion) {
-            select(suggestion.data);
-            searchField.val('');
-            // searchField.blur();
-        }
-    });
-    $('#search').show();
-});
 
 
 // read map of ISO-3166 alpha 3 country codes to gray index levels of lookup
@@ -490,28 +582,68 @@ readJsonFile('data/countries.json', function(countries) {
 readJsonFile('data/gray_codes.json', function(gray_codes) {
     ISOCodeToIndexColorMap = gray_codes;
 
-    // read map of indicator keys (from TheWorldBank DataBank) to indicator
-    // names and measuring units
-    readJsonFile('data/indicators.json', function(indicators) {
-        indicatorIdToDetailsMap = indicators;
-        indicatorIdArray = [];
-        var addItem = function(txt) {
-            dropdownIndicator1.append("<li><a href='#'>" + txt + "</a></li>");
-            dropdownIndicator2.append("<li><a href='#'>" + txt + "</a></li>");
-            dropdownIndicator3.append("<li><a href='#'>" + txt + "</a></li>");
-        };
-
-        // adds to dropdown the available indicators for the user to pick /
-        // map to components
-        addItem("None");
-        for(var k in indicators) {
-            indicatorIdArray.push(k);
-            addItem(indicatorIdToDetailsMap[k].name);
+    readJsonFile('data/countries.json', function(countries) {
+        ISOCodeToDetailsMap = countries;
+        // data is listed in a second array with the format
+        // [{value: country name, data: ISO-3166 country code}, ...],
+        // which is then used as the input of dev-bridge auto-complete plugin
+        autoCompleteLookup = [];
+        for (var c in countries) {
+            // add country names and capitals to be used on auto complete search field
+            autoCompleteLookup.push({
+                value: countries[c].name,
+                data: c
+            });
         }
+        searchField.on('focus', function() {
+            var $this = $(this)
+                .one('mouseup.mouseupSelect', function() {
+                    $this.select();
+                    return false;
+                })
+                .one('mousedown', function() {
+                    // compensate for untriggered 'mouseup' caused by focus via tab
+                    $this.off('mouseup.mouseupSelect');
+                })
+                .select();
+        }).val("").devbridgeAutocomplete({
+            minChars: 1,
+            width: 430,
+            autoSelectFirst: true,
+            triggerSelectOnValidInput: false,
+            preventBadQueries: false,
+            lookup: autoCompleteLookup,
+            onSelect: function (suggestion) {
+                select(suggestion.data);
+                searchField.val('');
+                searchField.blur();
+            }
+        });
+        $('#search').show();
 
-        // read data arrays separated by year and by indicator key
-        readJsonFile('data/data.json', function(data) {
-            inputData = data;
+
+        readJsonFile('input.json', function(input) {
+
+            // read map of indicator keys (from TheWorldBank DataBank) to indicator
+            // names and measuring units
+            indicatorIdToDetailsMap = input.indicators;
+            indicatorIdArray = [];
+            var addItem = function(txt) {
+                dropdownIndicator1.append("<li><a href='#'>" + txt + "</a></li>");
+                dropdownIndicator2.append("<li><a href='#'>" + txt + "</a></li>");
+                dropdownIndicator3.append("<li><a href='#'>" + txt + "</a></li>");
+            };
+
+            // adds to dropdown the available indicators for the user to pick /
+            // map to components
+            addItem("None");
+            for(var k in indicatorIdToDetailsMap) {
+                indicatorIdArray.push(k);
+                addItem(indicatorIdToDetailsMap[k].name);
+            }
+
+            // read data arrays separated by year and by indicator key
+            inputData = input.data;
 
             var yearArray = [];
             var maxYear = 0;
@@ -529,15 +661,18 @@ readJsonFile('data/gray_codes.json', function(gray_codes) {
                     minYear = year;
                 }
             }
-            selectedYear = defaultSelectedYear;
-            selectedYearJson = inputData[defaultSelectedYear];
+            selectedIndicator1Id = input.defaultIndicator1;
+            selectedIndicator2Id = input.defaultIndicator2;
+            selectedIndicator3Id = input.defaultIndicator3;
+            selectedYear = input.defaultYear;
+            selectedYearJson = inputData[selectedYear];
 
             // setup the range for the year slider, based on the obtained max
             // and min values
             timeline.noUiSlider.destroy();
             var timelineSlider = noUiSlider.create(timeline, {
                 animate: true,
-                start: defaultSelectedYear,
+                start: selectedYear,
                 tooltips: true,
                 step: 1,
                 range: {
@@ -564,29 +699,35 @@ readJsonFile('data/gray_codes.json', function(gray_codes) {
                 updateIndicators(true, true, true, !keepBoundsOnYearChange);
                 rebuildAllComponents();
                 if(selectedCountryCode!=-1 && selectedCountryCode!=-1) {
-                    detailsContainer.innerHTML = getDetails(selectedCountryCode, selectedCountryLineIndex);
+                    //detailsContainer.innerHTML = getDetails(selectedCountryCode, selectedCountryLineIndex);
                 }
             });
             //slider.on('change', function(values, handle, unencoded) {
             //});
 
+            var name1 = indicatorIdToDetailsMap[selectedIndicator1Id].name;
+            dropdownIndicator1Container.find('.dropdownIndicatorText').html(name1);
+            indicator1Name.html(name1);
 
-            dropdownIndicator1Container.find('.dropdownIndicatorText')
-                .html(indicatorIdToDetailsMap[selectedIndicator1Id].name);
-            dropdownIndicator2Container.find('.dropdownIndicatorText')
-                .html(indicatorIdToDetailsMap[selectedIndicator2Id].name);
-            dropdownIndicator3Container.find('.dropdownIndicatorText')
-                .html(indicatorIdToDetailsMap[selectedIndicator3Id].name);
+            var name2 = indicatorIdToDetailsMap[selectedIndicator2Id].name;
+            dropdownIndicator2Container.find('.dropdownIndicatorText').html(name2);
+            indicator2Name.html(name2);
+
+            var name3 = indicatorIdToDetailsMap[selectedIndicator3Id].name;
+            dropdownIndicator3Container.find('.dropdownIndicatorText').html(name3);
+            indicator3Name.html(name3);
 
             updateIndicators(true, true, true, true);
 
             // once data is fully loaded, fade in hidden components
             timelineContainer.fadeIn('slow', function() {
             });
-            $('#parameters').fadeIn('slow', function() {
+            $('.parameter').fadeIn('slow', function() {
                 rebuildAllComponents();
                 worldSphereMesh.visible = true;
                 worldSphereMesh.needsUpdate = true;
+                loadingContainer.hide();
+                loading.removeClass('loading-ring-css');
             });
         });
     });
@@ -634,17 +775,18 @@ function updateIndicator3Slider() {
 }
 
 function updateIndicators(update1, update2, update3, resetSelected) {
+    searchField.blur();
     if(update1) {
-        realMinIndicator1 = 0;
-        realMaxIndicator1 = 0;
+        realMinIndicator1 = -1;
+        realMaxIndicator1 = -1;
     }
     if(update2) {
-        realMinIndicator2 = 0;
-        realMaxIndicator2 = 0;
+        realMinIndicator2 = -1;
+        realMaxIndicator2 = -1;
     }
     if(update3) {
-        realMinIndicator3 = 0;
-        realMaxIndicator3 = 0;
+        realMinIndicator3 = -1;
+        realMaxIndicator3 = -1;
     }
 
     var indicator1Array = selectedYearJson[selectedIndicator1Id];
@@ -816,12 +958,13 @@ function updateIndicators(update1, update2, update3, resetSelected) {
                 start: [selectedMinIndicator1, selectedMaxIndicator1],
                 tooltips: true,
                 connect: true,
+                step: 1,
                 range: {
                     'min': realMinIndicator1,
                     'max': realMaxIndicator1
                 },
                 format: wNumb({
-                    decimals: 3,
+                    decimals: 0,
                     thousand: '&nbsp;',
                     postfix: '&nbsp;'+indicator1Data.unit
                 })
@@ -866,16 +1009,21 @@ function updateIndicators(update1, update2, update3, resetSelected) {
             };
             indicator2Slider.setAttribute('disabled', true);
         } else {
+            //var decimals = 3;
+            //if(indicator2Data.unit === "people" && indicator2Data.unit === "people/km²") {
+            decimals = 0;
+            //}
             settings = {
                 start: [selectedMinIndicator2, selectedMaxIndicator2],
                 tooltips: true,
                 connect: true,
+                step: 1,
                 range: {
                     'min': realMinIndicator2,
                     'max': realMaxIndicator2
                 },
                 format: wNumb({
-                    decimals: 3,
+                    decimals: 0,
                     thousand: '&nbsp;',
                     postfix: '&nbsp;' + indicator2Data.unit
                 })
@@ -924,12 +1072,13 @@ function updateIndicators(update1, update2, update3, resetSelected) {
                 start: [selectedMinIndicator3, selectedMaxIndicator3],
                 tooltips: true,
                 connect: true,
+                step: 1,
                 range: {
                     'min': realMinIndicator3,
                     'max': realMaxIndicator3
                 },
                 format: wNumb({
-                    decimals: 3,
+                    decimals: 0,
                     thousand: '&nbsp;',
                     postfix: '&nbsp;'+indicator3Data.unit
                 })
@@ -975,19 +1124,19 @@ function rebuildComponents3() {
 
 function rebuildComponents(rebuild1And2, rebuild3) {
 
-    if(rebuild1And2) {
-        // remove previous bars
-        for (var i = 0 ; i < shownBars.length; i++) {
-            var barToRemove = shownBars[i];
-            globeScene.remove(barToRemove);
-            barToRemove.geometry.dispose();
-            barToRemove.material.dispose();
-            //barToRemove.texture.dispose()
-        }
-
-        // empty arrays to contain the new bars
-        shownBars = [];
-    }
+    //if(rebuild1And2) {
+    //    // remove previous bars
+    //    for (var i = 0 ; i < shownBarsData.length; i++) {
+    //        var barData = shownBarsData[i];
+    //        globeScene.remove(barData.bar);
+    //        barData.bar.geometry.dispose();
+    //        barData.bar.material.dispose();
+    //        //barData.bar.texture.dispose()
+    //    }
+    //
+    //    // empty arrays to add the new bars
+    //    shownBarsData = [];
+    //}
 
     if(rebuild3) {
         // clears all colored countries
@@ -1000,7 +1149,7 @@ function rebuildComponents(rebuild1And2, rebuild3) {
     var indicator3Array = selectedYearJson[selectedIndicator3Id];
     var has1 = rebuild1And2;
     var has2 = rebuild1And2;
-    var has3 = rebuild3;
+    var has3 = true;
     var length = 0;
 
     if (has1 && (typeof indicator1Array === 'undefined' || indicator1Array.length == 0)) {
@@ -1017,7 +1166,7 @@ function rebuildComponents(rebuild1And2, rebuild3) {
         length = indicator1Array.length;
     } else if (has2) {
         length = indicator2Array.length;
-    } else if(has3) {
+    } else {
         length = indicator3Array.length;
     }
 
@@ -1028,23 +1177,49 @@ function rebuildComponents(rebuild1And2, rebuild3) {
     }
 
     // empty countries array to update with new data
-    // TODO should be done only once?
     shownCountries = [];
 
+    var originalIndicator1Values = [];
+    var originalIndicator2Values = [];
+    var originalIndicator3Values = [];
+    var filteredIndicator1Values = [];
+    var filteredIndicator2Values = [];
+    var filteredIndicator3Values = [];
     for (var j = 0; j < length; j++) {
         var i1, i1NumberValue, i2, i2NumberValue, i3, i3NumberValue, countryCode;
 
         if(has1) {
             i1 = indicator1Array[j];
             i1NumberValue = Number(i1.value);
+            var v = parseFloat(parseFloat(i1NumberValue).toFixed(4));
+            if(v <= realMaxIndicator1 && v >= realMinIndicator1) {
+                originalIndicator1Values.push(v);
+            }
+            if(v <= selectedMaxIndicator1 && v >= selectedMinIndicator1) {
+                filteredIndicator1Values.push(v);
+            }
         }
         if(has2) {
             i2 = indicator2Array[j];
             i2NumberValue = Number(i2.value);
+            var v = parseFloat(parseFloat(i2NumberValue).toFixed(4));
+            if(v <= realMaxIndicator2 && v >= realMinIndicator2) {
+                originalIndicator2Values.push(v);
+            }
+            if(v <= selectedMaxIndicator2 && v >= selectedMinIndicator2) {
+                filteredIndicator2Values.push(v);
+            }
         }
         if(has3) {
             i3 = indicator3Array[j];
-            i3NumberValue = Number(i3.value);
+            i3NumberValue = parseFloat(i3.value);
+            var v = parseFloat(parseFloat(i3NumberValue).toFixed(4));
+            if(v <= realMaxIndicator3 && v >= realMinIndicator3) {
+                originalIndicator3Values.push(v);
+            }
+            if(v <= selectedMaxIndicator3 && v >= selectedMinIndicator3) {
+                filteredIndicator3Values.push(v);
+            }
         }
 
         // get the data, and set the offset, we need to do this since the x,y
@@ -1066,8 +1241,9 @@ function rebuildComponents(rebuild1And2, rebuild3) {
         if(countryDetails != null) {
             var value1, value2, value3;
 
+            i1NumberValue = parseFloat(parseFloat(i1NumberValue).toFixed(4));
             if(has1 && i1.value.length != 0 && i1NumberValue <= selectedMaxIndicator1 && i1NumberValue >= selectedMinIndicator1) {
-                value1 = normalize(selectedMinIndicator1, selectedMaxIndicator1, 0, 100, i1NumberValue);
+                value1 = normalize(selectedMinIndicator1, selectedMaxIndicator1, 0, maxBarHeight, i1NumberValue);
             } else {
                 value1 = 0;
             }
@@ -1077,6 +1253,7 @@ function rebuildComponents(rebuild1And2, rebuild3) {
                     // second indicator can still be observed
                     value1 = barNoDataHeight;
                 }
+                i2NumberValue = parseFloat(parseFloat(i2NumberValue).toFixed(4));
                 if(i2.value.length != 0 && i2NumberValue <= selectedMaxIndicator2 && i2NumberValue >= selectedMinIndicator2) {
                     value2 = normalize(selectedMinIndicator2, selectedMaxIndicator2, 0, 1, i2NumberValue);
                 } else {
@@ -1086,13 +1263,14 @@ function rebuildComponents(rebuild1And2, rebuild3) {
                 value2 = -1;
             }
 
+            i3NumberValue = parseFloat(parseFloat(i3NumberValue).toFixed(4));
             if(has3 && i3.value.length != 0 && i3NumberValue <= selectedMaxIndicator3 && i3NumberValue >= selectedMinIndicator3) {
                 value3 = normalize(selectedMinIndicator3, selectedMaxIndicator3, 0, 1, i3NumberValue);
             } else {
                 value3 = -1;
             }
 
-            if(value1 != 0) {
+            if(rebuild1And2) {
                 // find the color of the bar for the country, which is a color picked
                 // from a gradient of blue to yello associated with a scale between 0
                 // and 1. This value within that scale is obtained by scaling down the
@@ -1104,29 +1282,73 @@ function rebuildComponents(rebuild1And2, rebuild3) {
                     barColor = barColorScale(value2).hex();
                 }
 
-                // the is not mesh for the bar, so setup the bar material
-                // with the obtained color above
-                var barMat = new THREE.MeshBasicMaterial({ color: barColor, wireframe: false});
+                var hasBar = false;
+                // TODO: WE ARE NO LONGER REBUILDING BARS! THIS SHOULD BE
+                // OPTIMIZED THIS TO CREATE ONE ON STARTUP AND ADD THEM TO A
+                // MAP WITH COUNTRY CODES AS KEYS
+                for (var i = 0 ; i < shownBarsData.length; i++) {
+                    var barData = shownBarsData[i];
+                    if(barData.countryCode == countryCode) {
+                        hasBar = true;
 
-                // a CubeGeometry is used for the bar geometry instead of a BoxGeometry
-                // because we are using a old version of three.js (version 62)
-                var barGeom = new THREE.CubeGeometry(barWidth, barWidth, value1);
-                var mesh = new THREE.Mesh(barGeom, barMat);
+                        // change the material color
+                        var mesh1 = barData.bar;
+                        mesh1.material.color.setStyle(barColor);
 
-                // converts the country country lat-lng position into a vector in the
-                // three-dimensional space
-                var lat = countryDetails.latitude;
-                var lon = countryDetails.longitude;
-                var position = latLongToVector3(lat, lon, 100, 1);
-                mesh.position.x = position.x;
-                mesh.position.y = position.y;
-                mesh.position.z = position.z;
-                mesh.lookAt(new THREE.Vector3(0,0,0));
-                mesh.visible = false;
+                        var lat1 = countryDetails.latitude;
+                        var lon1 = countryDetails.longitude;
+                        mesh1.scale.x = barWidth;
+                        mesh1.scale.y = barWidth;
+                        var position1 = latLongToVector3(lat1, lon1, 100 + value1 / 2 - 2, 1);
+                        if (value1 == 0) {
+                            mesh1.scale.z = -1;
+                        } else {
+                            mesh1.scale.z = value1;
+                        }
+                        mesh1.position.x = position1.x;
+                        mesh1.position.y = position1.y;
+                        mesh1.position.z = position1.z;
 
-                // the bar is added to the scene and lookup-array
-                globeScene.add(mesh);
-                shownBars.push(mesh);
+                        break;
+                    }
+                }
+
+                if(!hasBar) {
+
+                    // setup the bar material with the obtained color above
+                    var barMat = new THREE.MeshBasicMaterial({ color: barColor, wireframe: false});
+
+                    // a CubeGeometry is used for the bar geometry instead of a BoxGeometry
+                    // because we are using a old version of three.js (version 62)
+                    var barGeom = new THREE.CubeGeometry(1, 1, 1);
+                    var mesh2 = new THREE.Mesh(barGeom, barMat);
+
+                    // converts the country country lat-lng position into a vector in the
+                    // three-dimensional space
+                    var lat2 = countryDetails.latitude;
+                    var lon2 = countryDetails.longitude;
+                    var position2 = latLongToVector3(lat2, lon2, 100 + value1/2 - 2, 1);
+                    mesh2.scale.x = barWidth;
+                    mesh2.scale.y = barWidth;
+                    if (value1 == 0) {
+                        mesh2.scale.z = -1;
+                    } else {
+                        mesh2.scale.z = value1;
+                    }
+                    mesh2.position.x = position2.x;
+                    mesh2.position.y = position2.y;
+                    mesh2.position.z = position2.z;
+                    mesh2.lookAt(new THREE.Vector3(0,0,0));
+                    mesh2.visible = false;
+
+                    // the bar is added to the scene and lookup-array
+                    globeScene.add(mesh2);
+                    shownBarsData.push({
+                        bar: mesh2,
+                        countryCode: countryCode
+                    });
+
+                }
             }
 
             if(value3 != -1) {
@@ -1136,10 +1358,137 @@ function rebuildComponents(rebuild1And2, rebuild3) {
         }
     }
 
-    for(var m in shownBars) {
-        var barToShow = shownBars[m];
+    if(rebuild1And2) {
+        if(!has1 || originalIndicator1Values.length == 0) {
+            var svg = d3.select('#chart1 svg');
+            svg.selectAll("*").remove();
+            svg.datum([]).call(chart1);
+
+        } else {
+            d3.select('#chart1 svg')
+                .datum(getChartData(
+                    originalIndicator1Values,
+                    filteredIndicator1Values,
+                    realMinIndicator1,
+                    realMaxIndicator1,
+                    selectedMinIndicator1,
+                    selectedMaxIndicator1))
+                .call(chart1);
+        }
+    }
+
+    if(rebuild1And2) {
+        if (!has2 || originalIndicator2Values.length == 0) {
+            var svg = d3.select('#chart2 svg');
+            svg.selectAll("*").remove();
+            svg.datum([]).call(chart2);
+
+        } else {
+            d3.select('#chart2 svg')
+                .datum(getChartData(
+                    originalIndicator2Values,
+                    filteredIndicator2Values,
+                    realMinIndicator2,
+                    realMaxIndicator2,
+                    selectedMinIndicator2,
+                    selectedMaxIndicator2))
+                .call(chart2);
+        }
+    }
+
+    if(rebuild3) {
+        if (!has3 || originalIndicator3Values.length == 0) {
+            var svg = d3.select('#chart3 svg');
+            svg.selectAll("*").remove();
+            svg.datum([]).call(chart3);
+
+        } else {
+            d3.select('#chart3 svg')
+                .datum(getChartData(
+                    originalIndicator3Values,
+                    filteredIndicator3Values,
+                    realMinIndicator3,
+                    realMaxIndicator3,
+                    selectedMinIndicator3,
+                    selectedMaxIndicator3))
+                .call(chart3);
+        }
+    }
+
+    for(var m in shownBarsData) {
+        var barToShow = shownBarsData[m].bar;
         barToShow.visible = true;
     }
+}
+
+
+function getRangeBetween(a, b, n) {
+    if(a == b) {
+        return [a];
+    }
+
+    var min, max;
+    if(a > b) {
+        var aux = a;
+        min = b;
+        max = aux;
+    } else {
+        min = a;
+        max = b;
+    }
+
+    var remainder = max - min;
+    var step = remainder / n;
+    var current = min;
+    var range = [];
+    while (current < max) {
+        range.push(current);
+        current = current + step;
+    }
+
+    if(range[range.length] != max) {
+        range.push(max);
+    }
+
+    return range;
+}
+
+function getChartData(originalData, filteredData, realMin, realMax, selectedMin, selectedMax) {
+
+    var originalDataStats = stats(originalData);
+    var originalQ1 = originalDataStats.q1();
+    var originalQ2 = originalDataStats.median();
+    var originalQ3 = originalDataStats.q3();
+
+    var filteredDataStats = stats(filteredData);
+    var filteredQ1 = filteredDataStats.q1();
+    var filteredQ2 = filteredDataStats.median();
+    var filteredQ3 = filteredDataStats.q3();
+
+    return  [
+        {
+            label: "Original",
+            color: '#aaa',
+            values: {
+                Q1: originalQ1,
+                Q2: originalQ2,
+                Q3: originalQ3,
+                whisker_low: realMin,
+                whisker_high: realMax
+            }
+        },
+        {
+            label: "Filtered",
+            color: '#aaa',
+            values: {
+                Q1: filteredQ1,
+                Q2: filteredQ2,
+                Q3: filteredQ3,
+                whisker_low: selectedMin,
+                whisker_high: selectedMax
+            }
+        }
+    ];
 }
 
 
@@ -1149,6 +1498,57 @@ function colorCountry(countryCode, color) {
     ratioContext.fillStyle = color;
     ratioContext.fillRect(countryCode, 0, 1, 1);
     ratioTexture.needsUpdate = true;
+}
+
+
+
+function onShowBoxPlotsCheckboxChange() {
+    showBoxPlots = showBoxPlotsCheckbox.checked;
+    updateBoxPlots();
+}
+
+
+
+function onShowBoxPlotsLabelClick() {
+    showBoxPlotsCheckbox.checked = !showBoxPlotsCheckbox.checked;
+    showBoxPlots = showBoxPlotsCheckbox.checked;
+    updateBoxPlots();
+}
+
+
+function updateBoxPlots() {
+    if(showBoxPlots) {
+        boxPlotContainer.show();
+    } else {
+        boxPlotContainer.hide();
+    }
+}
+
+
+
+function onAnchorCountryDetailsToMouseCheckboxChange() {
+    anchorCountryDetailsToMouse = anchorCountryDetailsToMouseCheckbox.checked;
+    if(anchorCountryDetailsToMouse) {
+        detailsContainerJQuery.addClass('details-dark');
+        detailsContainerJQuery.removeClass('details-light');
+    } else {
+        detailsContainerJQuery.removeClass('details-dark');
+        detailsContainerJQuery.addClass('details-light');
+    }
+}
+
+
+
+function onAnchorCountryDetailsToMouseLabelClick() {
+    anchorCountryDetailsToMouseCheckbox.checked = !anchorCountryDetailsToMouseCheckbox.checked;
+    anchorCountryDetailsToMouse = anchorCountryDetailsToMouseCheckbox.checked;
+    if(anchorCountryDetailsToMouse) {
+        detailsContainerJQuery.addClass('details-dark');
+        detailsContainerJQuery.removeClass('details-light');
+    } else {
+        detailsContainerJQuery.removeClass('details-dark');
+        detailsContainerJQuery.addClass('details-light');
+    }
 }
 
 
@@ -1165,6 +1565,136 @@ function onKeepBoundsLabelClick() {
 }
 
 
+function attemptShowDetailsOfCountry(x, y) {
+    if(cameraIsBeingDragged) {
+        highlightContext.clearRect(0, 0, 256, 1);
+        highlightTexture.needsUpdate = true;
+        detailsContainer.innerHTML = "";
+        detailsContainerJQuery.hide();
+        return;
+    }
+
+    var rayCaster = projector.pickingRay(mouse2D.clone(), camera);
+    var countryIndexColor = -1;
+    var hoveredABar = false;
+    var hoveredACountry = false;
+
+    for (var i = 0; i < shownBarsData.length; i++) {
+        var selectedBarData = shownBarsData[i];
+        var intersects = rayCaster.intersectObject(selectedBarData.bar);
+        if (intersects.length) {
+            // mouse hover intersected the bar i, so select it and the corresponding country
+            //cameraTargetX = selectedBarData.position.x;
+            //cameraTargetY = selectedBarData.position.y;
+            //cameraTargetZ = selectedBarData.position.z;
+            //cameraIsMovingToTarget = true;
+            for (var j = 0; j < shownCountries.length; j++) {
+                var c1 = shownCountries[j];
+                if(c1.countryCode == selectedBarData.countryCode) {
+                    countryIndexColor = ISOCodeToIndexColorMap[c1.countryCode];
+                    if (countryIndexColor > 0) {
+                        // the country was hovered and had details, so select it
+                        detailsContainer.innerHTML = getDetails(c1.countryCode, c1.lineIndex);
+                        if(anchorCountryDetailsToMouse) {
+                            detailsContainerJQuery.offset({
+                                left: x + tooltipOffset,
+                                top: y + tooltipOffset
+                            });
+                        } else {
+                            detailsContainerJQuery.offset({
+                                left: window.innerWidth - detailsContainer.offsetWidth,
+                                top: 50
+                            });
+                            detailsContainerJQuery.removeClass('details-dark');
+                            detailsContainerJQuery.addClass('details-light');
+                        }
+                        detailsContainerJQuery.show();
+                        //var countryDetails = ISOCodeToDetailsMap[c1.countryCode];
+                        //var lat = countryDetails.latitude;
+                        //var lon = countryDetails.longitude;
+                        //var position = latLongToVector3(lat, lon, 100, 1);
+                        //cameraTargetX = position.x;
+                        //cameraTargetY = position.y;
+                        //cameraTargetZ = position.z;
+                        //cameraIsMovingToTarget = true;
+
+                        highlightContext.clearRect(0, 0, 256, 1);
+                        highlightContext.fillStyle = "#666666";
+                        highlightContext.fillRect(countryIndexColor, 0, 1, 1);
+                        highlightTexture.needsUpdate = true;
+                        searchField.blur();
+                        hoveredABar = true;
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    if (!hoveredABar) {
+        // mouse did not intersect a bar, so check if it intersected a country
+        var intersectionList = rayCaster.intersectObject(worldSphereMesh);
+        if (intersectionList.length > 0) {
+            var data = intersectionList[0];
+            var d = data.point.clone().normalize();
+            var u = Math.round(4096 * (1 - (0.5 + Math.atan2(d.z, d.x) / (2 * Math.PI))));
+            var v = Math.round(2048 * (0.5 - Math.asin(d.y) / Math.PI));
+            var p = mapContext.getImageData(u, v, 1, 1).data;
+            countryIndexColor = p[0];
+            // countryIndexColor 0 is the sea and -1 is invalid, so ignore
+            // those instances
+            if (countryIndexColor > 0) {
+                // a country was hovered, but we need to ignore it if its
+                // details were filtered
+                for (var k = 0; k < shownCountries.length; k++) {
+                    var c2 = shownCountries[k];
+                    if (ISOCodeToIndexColorMap[c2.countryCode] == countryIndexColor) {
+                        // the country was hovered and had details, so select it
+                        detailsContainer.innerHTML = getDetails(c2.countryCode, c2.lineIndex);
+                        if(anchorCountryDetailsToMouse) {
+                            detailsContainerJQuery.offset({
+                                left: x + tooltipOffset,
+                                top: y + tooltipOffset
+                            });
+                        } else {
+                            detailsContainerJQuery.offset({
+                                left: window.innerWidth - 425,
+                                top: 50
+                            });
+                        }
+                        detailsContainerJQuery.show();
+                        //var countryDetails = ISOCodeToDetailsMap[c2.countryCode];
+                        //var lat = countryDetails.latitude;
+                        //var lon = countryDetails.longitude;
+                        //var position = latLongToVector3(lat, lon, 100, 1);
+                        //cameraTargetX = position.x;
+                        //cameraTargetY = position.y;
+                        //cameraTargetZ = position.z;
+                        //cameraIsMovingToTarget = true;
+
+                        highlightContext.clearRect(0, 0, 256, 1);
+                        highlightContext.fillStyle = "#666666";
+                        highlightContext.fillRect(countryIndexColor, 0, 1, 1);
+                        highlightTexture.needsUpdate = true;
+                        searchField.blur();
+                        hoveredACountry = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if(!hoveredABar && !hoveredACountry) {
+        highlightContext.clearRect(0, 0, 256, 1);
+        highlightTexture.needsUpdate = true;
+        detailsContainer.innerHTML = "";
+        detailsContainerJQuery.hide();
+    }
+}
+
+
 // mouse movement callback which detects the distance between the last
 // mouseDown event and determines if the country selection action should still
 // be triggered when the mouseUp event occurs, by observing if a minimum drag
@@ -1172,31 +1702,37 @@ function onKeepBoundsLabelClick() {
 function onMouseMove(event) {
     event.preventDefault();
 
-    mouse2D.x =   (event.clientX / window.innerWidth) * 2 - 1;
-    mouse2D.y = - (event.clientY / window.innerHeight) * 2 + 1;
+    mouse2D.x =   (event.clientX / worldContainer.offsetWidth) * 2 - 1;
+    mouse2D.y = - (event.clientY / worldContainer.offsetHeight) * 2 + 1;
 
-    // xdiff and ydiff represent the mouse distance between the current mouse
-    // position and the mouse position when the mouse button was last pressed
-    var xdiff = lastMouseX - mouse2D.x;
-    if(xdiff < 0) {
-        xdiff = -xdiff;
-    }
+    //// xdiff and ydiff represent the mouse distance between the current mouse
+    //// position and the mouse position when the mouse button was last pressed
+    //var xdiff = lastMouseX - mouse2D.x;
+    //if(xdiff < 0) {
+    //    xdiff = -xdiff;
+    //}
+    //
+    //var ydiff = lastMouseY - mouse2D.y;
+    //if(ydiff < 0) {
+    //    ydiff = -ydiff;
+    //}
+    //
+    //// if the distance measured above exceeds a minimum value (defined as a
+    //// constant), then the country selection action is ignored, performing
+    //// only the globe drag
+    //isSelectingCountry = !(xdiff > minimumDragDistance || ydiff > minimumDragDistance);
 
-    var ydiff = lastMouseY - mouse2D.y;
-    if(ydiff < 0) {
-        ydiff = -ydiff;
-    }
-
-    // if the distance measured above exceeds a minimum value (defined as a
-    // constant), then the country selection action is ignored, performing
-    // only the globe drag
-    isSelectingCountry = !(xdiff > minimumDragDistance || ydiff > minimumDragDistance);
+    attemptShowDetailsOfCountry(event.pageX, event.pageY);
 }
 
 
 // mouse movement callback which interrupts camera selection movement
 function onMouseWheel(event) {
     cameraIsMovingToTarget = false;
+    highlightContext.clearRect(0, 0, 256, 1);
+    highlightTexture.needsUpdate = true;
+    detailsContainer.innerHTML = "";
+    detailsContainerJQuery.hide();
 }
 
 
@@ -1206,10 +1742,9 @@ function onMouseDown(event) {
     event.preventDefault();
     cameraIsBeingDragged = true;
 
-    lastMouseX =   (event.clientX / window.innerWidth) * 2 - 1;
-    lastMouseY = - (event.clientY / window.innerHeight) * 2 + 1;
+    lastMouseX =   (event.clientX / worldContainer.offsetWidth) * 2 - 1;
+    lastMouseY = - (event.clientY / worldContainer.offsetHeight) * 2 + 1;
 
-    isSelectingCountry = true;
     cameraIsMovingToTarget = false;
 }
 
@@ -1219,90 +1754,21 @@ function onMouseDown(event) {
 function onMouseUp(event) {
     event.preventDefault();
     cameraIsBeingDragged = false;
-    mouse2D.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse2D.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    mouse2D.x = (event.clientX / worldContainer.offsetWidth) * 2 - 1;
+    mouse2D.y = -(event.clientY / worldContainer.offsetHeight) * 2 + 1;
+}
 
-    if (!isSelectingCountry) {
-        return;
-    }
 
-    var rayCaster = projector.pickingRay(mouse2D.clone(), camera);
-    var countryIndexColor = -1;
-    //var selectedABar = false;
-    //for (var i = 0; i < shownBars.length; i++) {
-    //    var selectedObject = shownBars[i];
-    //    var intersects = rayCaster.intersectObject(selectedObject);
-    //    if (intersects.length) {
-    //        // mouse click intersected the bar i, so select it and the corresponding country
-    //        cameraTargetX = selectedObject.position.x;
-    //        cameraTargetY = selectedObject.position.y;
-    //        cameraTargetZ = selectedObject.position.z;
-    //        cameraIsMovingToTarget = true;
-    //        var c = shownCountries[i];
-    //        countryIndexColor = ISOCodeToIndexColorMap[c.countryCode];
-    //        if (countryIndexColor > 0) {
-    //
-    //            detailsContainer.innerHTML = getDetails(c.lineIndex);
-    //            var countryDetails = ISOCodeToDetailsMap[c.countryCode];
-    //            var lat = countryDetails.latitude;
-    //            var lon = countryDetails.longitude;
-    //            var position = latLongToVector3(lat, lon, 100, 1);
-    //            cameraTargetX = position.x;
-    //            cameraTargetY = position.y;
-    //            cameraTargetZ = position.z;
-    //            cameraIsMovingToTarget = true;
-    //
-    //            highlightContext.clearRect(0, 0, 256, 1);
-    //            highlightContext.fillStyle = "#666666";
-    //            highlightContext.fillRect(countryIndexColor, 0, 1, 1);
-    //            highlightTexture.needsUpdate = true;
-    //            searchField.blur();
-    //            selectedABar = true;
-    //        }
-    //        break;
-    //    }
-    //}
-    //
-    //if (!selectedABar) {
-    // mouse did not intersect a bar, so check if it intersected a country
-    var intersectionList = rayCaster.intersectObject(worldSphereMesh);
-    if (intersectionList.length > 0) {
-        var data = intersectionList[0];
-        var d = data.point.clone().normalize();
-        var u = Math.round(4096 * (1 - (0.5 + Math.atan2(d.z, d.x) / (2 * Math.PI))));
-        var v = Math.round(2048 * (0.5 - Math.asin(d.y) / Math.PI));
-        var p = mapContext.getImageData(u, v, 1, 1).data;
-        countryIndexColor = p[0];
-        // countryIndexColor 0 is the sea and -1 is invalid, so ignore
-        // those instances
-        if (countryIndexColor > 0) {
-            // a country was clicked, but we need to ignore it if its
-            // details were filtered
-            for (var i = 0; i < shownCountries.length; i++) {
-                var c = shownCountries[i];
-                if (ISOCodeToIndexColorMap[c.countryCode] == countryIndexColor) {
-                    // the country was clicked and had details, so select it
-                    detailsContainer.innerHTML = getDetails(c.countryCode, c.lineIndex);
-                    var countryDetails = ISOCodeToDetailsMap[c.countryCode];
-                    var lat = countryDetails.latitude;
-                    var lon = countryDetails.longitude;
-                    var position = latLongToVector3(lat, lon, 100, 1);
-                    cameraTargetX = position.x;
-                    cameraTargetY = position.y;
-                    cameraTargetZ = position.z;
-                    cameraIsMovingToTarget = true;
+// TODO
+function onTouchStart(event) {
+    event.preventDefault();
+    cameraIsMovingToTarget = false;
+}
 
-                    highlightContext.clearRect(0, 0, 256, 1);
-                    highlightContext.fillStyle = "#666666";
-                    highlightContext.fillRect(countryIndexColor, 0, 1, 1);
-                    highlightTexture.needsUpdate = true;
-                    searchField.blur();
-                    break;
-                }
-            }
-        }
-    }
-    //}
+
+// TODO
+function onTouchMove(event) {
+    event.preventDefault();
 }
 
 
@@ -1319,19 +1785,40 @@ function select(countryCodeToSelect) {
     cameraIsMovingToTarget = true;
 
     var countryIndexColor = ISOCodeToIndexColorMap[countryCodeToSelect];
-    highlightContext.clearRect(0,0,256,1);
-    highlightContext.fillStyle = "#666666";
-    highlightContext.fillRect(countryIndexColor, 0, 1, 1);
-    highlightTexture.needsUpdate = true;
+    blinkCountry(countryIndexColor);
 
-    for (var i = 0; i < shownCountries.length; i++) {
-        var c = shownCountries[i];
-        if (ISOCodeToIndexColorMap[c.countryCode] == countryIndexColor) {
-            // the country was clicked and had details, so select it
-            detailsContainer.innerHTML = getDetails(c.countryCode, c.lineIndex);
-            break;
-        }
+    //for (var i = 0; i < shownCountries.length; i++) {
+    //    var c = shownCountries[i];
+    //    if (ISOCodeToIndexColorMap[c.countryCode] == countryIndexColor) {
+    //        // the country was hovered and had details, so select it
+    //        detailsContainer.innerHTML = getDetails(c.countryCode, c.lineIndex);
+    //        detailsContainerJQuery.offset({
+    //            left: Math.floor(worldContainer.offsetWidth/2) + tooltipOffset,
+    //            top: Math.floor(worldContainer.offsetHeight/2) + tooltipOffset
+    //        }).show(1000);
+    //        break;
+    //    }
+    //}
+}
+
+function blinkCountry(countryIndexColor) {
+    blinkCountryAux(countryIndexColor, 0, 4)
+}
+
+function blinkCountryAux(countryIndexColor, count, max) {
+    highlightContext.clearRect(0,0,256,1);
+    highlightTexture.needsUpdate = true;
+    if(count >= max) {
+        return;
     }
+    setTimeout(function () {
+        highlightContext.fillStyle = "#fff";
+        highlightContext.fillRect(countryIndexColor, 0, 1, 1);
+        highlightTexture.needsUpdate = true;
+        setTimeout(function (){
+            blinkCountryAux(countryIndexColor, count+1, max)
+        }, 200);
+    }, 200);
 }
 
 // function that returns text details for a given country
@@ -1347,7 +1834,7 @@ function getDetails(countryCode, countryLineIndex) {
         countryName = countryDetails.name;
     }
 
-    var s = "<h1>" + countryName + "</h1><h3>(" + countryCode + ")</h3>";
+    var s = "<h4>" + countryName + " <span>(" + countryCode + ")</span></h4>";
 
     for(var i = 0; i < indicatorIdArray.length; i++) {
         var id = indicatorIdArray[i];
